@@ -1,0 +1,5 @@
+*.img
+*.img.xz
+*.ext4
+*.artifact
+mender-artifact
