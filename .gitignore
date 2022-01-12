@@ -1,5 +1,5 @@
 *.img
 *.img.xz
 *.ext4
-*.artifact
+*.mender
 mender-artifact

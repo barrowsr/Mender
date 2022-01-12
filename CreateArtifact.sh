@@ -1,5 +1,8 @@
 #!/bin/bash
 
+WIFI_SSID='$1' # CHANGE: your WiFi name
+WIFI_PASS='$2' # CHANGE: your WiFi password
+
 # Get password if needed
 sudo echo ""
 
@@ -20,39 +23,40 @@ export LOOPBACK=`sudo losetup --find --show --partscan $IMAGE.img`
 
 # Mount single partition
 mkdir -p /tmp/rootfs
-sudo umount /tmp/rootfs/etc
-sudo umount /tmp/rootfs/data
-sudo umount /tmp/rootfs
+sudo umount /tmp/rootfs/data /tmp/rootfs/boot /tmp/rootfs
 sudo mount -o rw -t ext4 ${LOOPBACK}p2 /tmp/rootfs
-mkdir -p /tmp/rootfs/data
+sudo mount -o rw -t vfat ${LOOPBACK}p1 /tmp/rootfs/boot
 sudo mount -o rw -t ext4 ${LOOPBACK}p4 /tmp/rootfs/data
-sudo mkdir -p /tmp/rootfs/data/etc-overlay{,-working}
 
 #################################
 ## Do somthing interesting here
 
-# get mender installer
-#curl -fLsS https://get.mender.io -o /tmp/rootfs/home/pi/get-mender.sh
-sudo su -c 'echo "overlay /etc overlay defaults,x-systemd.requires-mounts-for=/data,lowerdir=/etc,upperdir=/data/etc-overlay,workdir=/data/etc-overlay-working 0 0" >> /tmp/rootfs/etc/fstab'
+sudo su -c 'echo "Test version built on `date`" > /tmp/rootfs/etc/version'
+RPI_BOOT="/tmp/rootfs/boot"
+COUNTRY='US' # CHANGE: two-letter country code, see https://en.wikipedia.org/wiki/ISO_3166-1
+
+cat << EOF > /tmp/wpa_supplicant.conf
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+country=$COUNTRY
+
+network={
+         ssid="$WIFI_SSID"
+         psk="$WIFI_PASS"
+}
+EOF
+sudo mv /tmp/wpa_supplicant.conf "$RPI_BOOT"/wpa_supplicant.conf
 
 # Create docker With this rootfs to do some stuff in.
 docker run --cap-add=sys_admin --platform linux/arm/v7 -v /tmp/rootfs:/rootfs --name=MenderRootFs --rm -ti -d arm32v7/debian:buster
-docker exec MenderRootFs mount -t overlay overlay -o lowerdir=/rootfs/etc,upperdir=/rootfs/data/etc-overlay,workdir=/rootfs/data/etc-overlay-working /rootfs/etc
-#docker exec MenderRootFs chroot /rootfs bash -x /home/pi/get-mender.sh
 docker exec MenderRootFs chroot /rootfs systemctl enable ssh
 docker stop MenderRootFs
-
-
-# Mark version
-sudo su -c 'echo "Test version built on `date`" > /tmp/rootfs/etc/version'
 
 ## Done with interesting things
 #################################
 
 # Clean up mount
-sudo umount /tmp/rootfs/etc
-sudo umount /tmp/rootfs/data
-sudo umount /tmp/rootfs
+sudo umount /tmp/rootfs/data /tmp/rootfs/boot /tmp/rootfs
 
 # Extract partition and clone it to the fallpack partition as well.
 sudo dd if=${LOOPBACK}p2 of=$IMAGE.p2.ext4 status=progress
@@ -70,7 +74,6 @@ sudo chmod +x mender-artifact
    -n release-1 \
    --software-version rootfs-v1 \
    -f $IMAGE.p2.ext4 \
-   --config configs/raspberrypi4_config \
    -o testartifact.mender
 
 
