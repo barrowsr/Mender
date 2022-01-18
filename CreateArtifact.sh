@@ -48,6 +48,18 @@ EOF
 sudo mv /tmp/wpa_supplicant.conf "$RPI_BOOT"/wpa_supplicant.conf
 
 # Create docker With this rootfs to do some stuff in.
+## THIS DOCKER DOESNT WORK UNLESS YOU DO THE FOLLOWING:
+## sudo add-apt-repository universe
+## sudo apt-get install qemu binfmt-support qemu-user-static docker
+## sudo systemctl start docker
+## sudo systemctl enable docker
+## sudo groupadd docker
+## sudo usermod -aG docker ${USER}
+## # must re login for last setting to take effect
+## docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+## After that the output of
+## docker run --rm --platform linux/arm/v7 -t arm32v7/ubuntu uname -m
+## Response should be "armv7l"
 docker run --cap-add=sys_admin --platform linux/arm/v7 -v /tmp/rootfs:/rootfs --name=MenderRootFs --rm -ti -d arm32v7/debian:buster
 docker exec MenderRootFs chroot /rootfs systemctl enable ssh
 docker stop MenderRootFs
