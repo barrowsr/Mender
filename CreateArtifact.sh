@@ -1,7 +1,7 @@
 #!/bin/bash
 
-WIFI_SSID='$1' # CHANGE: your WiFi name
-WIFI_PASS='$2' # CHANGE: your WiFi password
+WIFI_SSID="$1" # CHANGE: your WiFi name
+WIFI_PASS="$2" # CHANGE: your WiFi password
 
 # Get password if needed
 sudo echo ""
@@ -23,15 +23,12 @@ export LOOPBACK=`sudo losetup --find --show --partscan $IMAGE.img`
 
 # Mount single partition
 mkdir -p /tmp/rootfs
-sudo umount /tmp/rootfs/data /tmp/rootfs/boot /tmp/rootfs
+sudo umount /tmp/rootfs/data /tmp/rootfs/boot /tmp/rootfs > /dev/null 2>&1
 sudo mount -o rw -t ext4 ${LOOPBACK}p2 /tmp/rootfs
 sudo mount -o rw -t vfat ${LOOPBACK}p1 /tmp/rootfs/boot
 sudo mount -o rw -t ext4 ${LOOPBACK}p4 /tmp/rootfs/data
 
-#################################
-## Do somthing interesting here
 
-sudo su -c 'echo "Test version built on `date`" > /tmp/rootfs/etc/version'
 RPI_BOOT="/tmp/rootfs/boot"
 COUNTRY='US' # CHANGE: two-letter country code, see https://en.wikipedia.org/wiki/ISO_3166-1
 
@@ -45,27 +42,36 @@ network={
          psk="$WIFI_PASS"
 }
 EOF
-sudo mv /tmp/wpa_supplicant.conf "$RPI_BOOT"/wpa_supplicant.conf
+sudo mv /tmp/wpa_supplicant.conf "$RPI_BOOT"/wpa_supplicant.conf 2>&1 | grep -v "failed to preserve ownership"
 
-# Create docker With this rootfs to do some stuff in.
+# Write a version file so you have something to check if the artifact updated properly
+sudo su -c 'echo "Test version built on `date`" > /tmp/rootfs/etc/version'
+
+############################################################################
+## Create a armv7 docker With this rootfs to do some stuff in.
+##
 ## THIS DOCKER DOESNT WORK UNLESS YOU DO THE FOLLOWING:
-## sudo add-apt-repository universe
-## sudo apt-get install qemu binfmt-support qemu-user-static docker
-## sudo systemctl start docker
-## sudo systemctl enable docker
-## sudo groupadd docker
-## sudo usermod -aG docker ${USER}
-## # must re login for last setting to take effect
-## docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+##   sudo add-apt-repository universe
+##   sudo apt-get install qemu binfmt-support qemu-user-static docker
+##   sudo systemctl start docker
+##   sudo systemctl enable docker
+##   sudo groupadd docker
+##   sudo usermod -aG docker ${USER}
+## Must re login for last setting to take effect
+##   docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 ## After that the output of
-## docker run --rm --platform linux/arm/v7 -t arm32v7/ubuntu uname -m
+##   docker run --rm --platform linux/arm/v7 -t arm32v7/ubuntu uname -m
 ## Response should be "armv7l"
+##
+docker stop MenderRootFs > /dev/null 2>&1
 docker run --cap-add=sys_admin --platform linux/arm/v7 -v /tmp/rootfs:/rootfs --name=MenderRootFs --rm -ti -d arm32v7/debian:buster
 docker exec MenderRootFs chroot /rootfs systemctl enable ssh
+# Install Mender deb packages
+docker exec MenderRootFs chroot /rootfs bash -c 'wget -q -O- https://get.mender.io | bash -s -- '
 docker stop MenderRootFs
 
-## Done with interesting things
-#################################
+## Done with adding things using a armv7 docker
+############################################################################
 
 # Clean up mount
 sudo umount /tmp/rootfs/data /tmp/rootfs/boot /tmp/rootfs
