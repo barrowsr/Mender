@@ -29,7 +29,6 @@ sudo mount -o rw -t vfat ${LOOPBACK}p1 /tmp/rootfs/boot
 sudo mount -o rw -t ext4 ${LOOPBACK}p4 /tmp/rootfs/data
 
 
-RPI_BOOT="/tmp/rootfs/boot"
 COUNTRY='US' # CHANGE: two-letter country code, see https://en.wikipedia.org/wiki/ISO_3166-1
 
 cat << EOF > /tmp/wpa_supplicant.conf
@@ -42,10 +41,11 @@ network={
          psk="$WIFI_PASS"
 }
 EOF
-sudo mv /tmp/wpa_supplicant.conf "$RPI_BOOT"/wpa_supplicant.conf 2>&1 | grep -v "failed to preserve ownership"
-
-# Write a version file so you have something to check if the artifact updated properly
-sudo su -c 'echo "Test version built on `date`" > /tmp/rootfs/etc/version'
+sudo mv /tmp/wpa_supplicant.conf /tmp/rootfs/data/wpa_supplicant.conf 2>&1 | grep -v "failed to preserve ownership"
+pushd /tmp/rootfs/etc/wpa_supplicant
+sudo rm -rf wpa_supplicant.conf
+sudo ln -s /data/wpa_supplicant.conf wpa_supplicant.conf
+popd
 
 ############################################################################
 ## Create a armv7 docker With this rootfs to do some stuff in.
@@ -80,6 +80,11 @@ sudo umount /tmp/rootfs/data /tmp/rootfs/boot /tmp/rootfs
 sudo dd if=${LOOPBACK}p2 of=$IMAGE.p2.ext4 status=progress
 sudo dd if=${LOOPBACK}p2 of=${LOOPBACK}p3 status=progress
 sudo losetup -d $LOOPBACK
+
+# Write a version file so you have something to check if the artifact updated properly
+sudo mount -o rw -t ext4 $IMAGE.p2.ext4 /tmp/rootfs
+sudo su -c 'echo "Test version built on `date`" > /tmp/rootfs/etc/version'
+sudo umount /tmp/rootfs
 
 # use "Artifact" executable https://docs.mender.io/downloads
 if [ ! -f mender-artifact ]; then
